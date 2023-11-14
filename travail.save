@@ -1,0 +1,144 @@
+#!/bin/bash
+
+# Fonction pour afficher le menu
+afficher_menu() {
+  echo "Menu d'administration d'utilisateurs"
+  echo "1. Ajout d'un utilisateur"
+  echo "2. Modification d'un utilisateur"
+  echo "3. Suppression d'un utilisateur"
+  echo "4. Sortie"
+}
+
+# Fonction pour ajouter un utilisateur
+ajouter_utilisateur() {
+  read -p "Nom d'utilisateur : " username
+  read -p "Chemin du dossier utilisateur : " userdir
+  read -p "Date d'expiration (YYYY-MM-DD) : " expiration_date
+  read -p "Mot de passe : " password
+  read -p "Shell : " shell
+  read -p "Identifiant : " userid
+
+  if [ -z "$username" ] || [ -z "$userdir" ] || [ -z "$expiration_date" ] || [ -z "$shell" ]; then
+    echo "Erreur : Tous les champs obligatoires doivent être remplis."
+    return 1
+  fi
+
+  if id "$username" &>/dev/null; then
+    echo "Erreur : L'utilisateur existe déjà."
+    return 2
+  fi
+
+  if [ ! -d "$userdir" ]; then
+    echo "Erreur : Le chemin du dossier utilisateur n'existe pas."
+    return 3
+  fi
+
+  today=$(date +"%Y-%m-%d")
+  if [ "$expiration_date" \< "$today" ]; then
+    echo "Erreur : La date d'expiration est antérieure à la date actuelle."
+    return 4
+  fi
+
+  if ! grep -q "$shell" /etc/shells; then
+    echo "Erreur : Le Shell n'est pas installé sur le système."
+    return 5
+  fi
+
+  useradd -m -d "$userdir" -e "$expiration_date" -p "$password" -s "$shell" -u "$userid" "$username"
+  echo "Utilisateur ajouté avec succès."
+  return 0
+}
+
+# Fonction pour modifier un utilisateur
+modifier_utilisateur() {
+  read -p "Nom d'utilisateur à modifier : " username
+  if ! id "$username" &>/dev/null; then
+    echo "Erreur : L'utilisateur n'existe pas."
+    return 1
+  fi
+
+  read -p "Nouveau nom d'utilisateur : " new_username
+  read -p "Nouveau chemin du dossier utilisateur : " new_userdir
+  read -p "Nouvelle date d'expiration (YYYY-MM-DD) : " new_expiration_date
+  read -p "Nouveau mot de passe : " new_password
+  read -p "Nouveau Shell : " new_shell
+  read -p "Nouvel identifiant : " new_userid
+
+  if [ -z "$new_username" ] || [ -z "$new_userdir" ] || [ -z "$new_expiration_date" ] || [ -z "$new_shell" ]; then
+    echo "Erreur : Tous les champs obligatoires doivent être remplis."
+    return 2
+  fi
+
+  if [ "$userdir" != "$new_userdir" ]; then
+    usermod -d "$new_userdir" "$username"
+  fi
+
+  if [ "$expiration_date" != "$new_expiration_date" ]; then
+    usermod -e "$new_expiration_date" "$username"
+  fi
+
+  if [ "$shell" != "$new_shell" ]; then
+    if ! grep -q "$new_shell" /etc/shells; then
+      echo "Erreur : Le nouveau Shell n'est pas installé sur le système."
+      return 3
+    fi
+    usermod -s "$new_shell" "$username"
+  fi
+
+  if [ "$userid" != "$new_userid" ]; then
+    usermod -u "$new_userid" "$username"
+  fi
+
+  if [ "$username" != "$new_username" ]; then
+    usermod -l "$new_username" "$username"
+  fi
+
+  if [ "$password" != "$new_password" ]; then
+    echo "$username:$new_password" | chpasswd
+  fi
+
+  echo "Utilisateur modifié avec succès."
+  return 0
+}
+
+# Fonction pour supprimer un utilisateur
+supprimer_utilisateur() {
+  read -p "Nom d'utilisateur à supprimer : " username
+  if ! id "$username" &>/dev/null; then
+    echo "Erreur : L'utilisateur n'existe pas."
+    return 1
+  fi
+
+  read -p "Supprimer le dossier utilisateur (oui/non) : " remove_userdir
+  if [ "$remove_userdir" == "oui" ]; then
+    userdel -r "$username"
+  else
+    userdel "$username"
+  fi
+
+  echo "Utilisateur supprimé avec succès."
+  return 0
+}
+
+# Boucle principale du script
+while true; do
+  afficher_menu
+  read -p "Choisissez une option (1/2/3/4) : " option
+
+  case $option in
+    1)
+      ajouter_utilisateur
+      ;;
+    2)
+      modifier_utilisateur
+      ;;
+    3)
+      supprimer_utilisateur
+      ;;
+    4)
+      echo "Sortie du script."
+      exit 0
+      ;;
+    *)
+      echo "Option invalide. Veuillez choisir une option valide (1/2/3/4)."
+      ;;
